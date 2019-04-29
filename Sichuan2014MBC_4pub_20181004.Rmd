@@ -27,6 +27,8 @@ library(stringr)
 library(SpeciesMix)
 library(beepr)
 library(corrplot)
+#library(devtools)
+#install_github("tobiasgf/lulu")
 library(lulu)
 #source("https://bioconductor.org/biocLite.R")
 #biocLite("phyloseq")
@@ -114,7 +116,7 @@ commMBC.44 <- commMBC.44[ rowSums(commMBC.44)>0,]
 rowSums(commMBC.44)
 commMBC44copies <- t(commMBC.44)
 
-# write.table(commMBC44copies, file = "lulu_3507/2014MBC_44reads_otu594.txt", sep = "\t", row.names = TRUE, col.names = TRUE)
+write.table(commMBC44copies, file = "lulu_3507/2014MBC_44reads_otu594.txt", sep = "\t", row.names = TRUE, col.names = TRUE)
 ```
 
 ## commnunity analyses start from here
@@ -290,7 +292,6 @@ heat_tree_matrix(obj,
                  node_size_axis_label = "Number of OTUs",
                  node_color_axis_label = "Log2 ratio median proportions")
 
-
 # page(compare_groups) #check codes of compare_groups, change "median" to "mean"
 
 ##### remove CL group to see differences in forest and plantations only 
@@ -339,7 +340,7 @@ heat_tree(objF,
           node_size = objF$n_obs(),
           node_color = objF$data$tax_occ$NF, 
           node_size_axis_label = "OTU count",
-          node_color_axis_label = "Samples with reads")
+          node_color_axis_label = "Log2 ratio median proportions")
 
 # Comparing any number of treatments/groups
 objF$data$diff_table <- compare_groups(objF, dataset = "tax_abund",
@@ -563,6 +564,11 @@ ggiNEXT(outI, type=1, facet.var="order")+theme_bw(base_size = 18)
 
 ```{r iNextPD, warning=FALSE }
 commPD <- communityB
+# commPD$Cluster418132 #
+# commPD$Cluster636975 #
+# commPD$Cluster549885 #
+commPD$Cluster99619
+
 #remove 3 OTUs with very long branches
 commPD$Cluster418132 <- NULL
 commPD$Cluster636975 <- NULL
@@ -631,11 +637,15 @@ tabasco(community, use = community.jmds, labCol = habitatN$Habitat, col = brewer
 comm4inext_abun <- as.data.frame(comm4inext_abun) # comm4inext_abun from iNEXT
 comm4inext_abun[comm4inext_abun>1] <- 1
 colSums(comm4inext_abun)
+# comm4inext_abun$MF <- comm4inext_abun$MP
 #sort(rowSums(comm4inext_abun))
 # upset(comm4inext_abun, nsets = 6, nintersects = 70, cutoff = 7, keep.order = TRUE)
 #upset(comm4inext_abun, sets = c("NF", "MP", "BB", "EC", "JC", "CL"), nintersects = 70, group.by = "sets", cutoff = 7, keep.order = TRUE)
 upset(comm4inext_abun, sets = c("NF", "MP", "BB", "EC", "JC", "CL"), cutoff = 6, nintersects = NA, group.by = "sets", keep.order = TRUE)
 upset(comm4inext_abun, sets = c("NF", "MP", "BB", "EC", "JC", "CL"), nintersects = NA, group.by = "sets", keep.order = TRUE)
+# upset(comm4inext_abun, sets = c("NF", "MF", "BB", "EC", "JC", "CL"), cutoff = 6, nintersects = NA, group.by = "sets", keep.order = TRUE)
+# upset(comm4inext_abun, sets = c("NF", "MF", "BB", "EC", "JC", "CL"), nintersects = NA, group.by = "sets", keep.order = TRUE)
+
 ```
 
 ## Betapart analysis before removing zerotons and singletons
