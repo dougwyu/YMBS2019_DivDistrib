@@ -220,7 +220,7 @@ anova(reads.glm, cor.type = "shrink", test = "score", show.time = "all", nBoot =
 
 ```
 
-#we used the taxonomic assignment (RDP classifier) results to built a taxon distribution of all OTUs
+# we used the taxonomic assignment (RDP classifier) results to built a taxon distribution of all OTUs
 ```{r metacoder, warning=FALSE}
 #### for otus taxa tree
 
@@ -632,7 +632,7 @@ stressplot(community.jmds)
 tabasco(community, use = community.jmds, labCol = habitatN$Habitat, col = brewer.pal(3, "Oranges"))
 ```
 
-```{r UpSet}
+```{r UpSetR}
 # In our case, Rows are OTUs, Columns are land-cover types (BB, EC, JC, MP, NF, CL). So this is pretty easy to make. 0/1 dataset
 comm4inext_abun <- as.data.frame(comm4inext_abun) # comm4inext_abun from iNEXT
 comm4inext_abun[comm4inext_abun>1] <- 1
