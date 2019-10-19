@@ -9,7 +9,6 @@ editor_options:
 
 # start R analysis
 ```{r setup, packages}
-
 library(ape) #read.tree() 
 library(tidyverse) 
 library(vegan)
@@ -38,7 +37,8 @@ library(ggplot2)
 library(metacoder)
 library(tibble)
 library(UpSetR)
-
+# library(renv)
+# renv::init()
 sessionInfo()
 
 ```
