@@ -578,7 +578,6 @@ ChaoShannon(comm4inext, datatype="incidence_freq")
 outI <- iNEXT(comm4inext, q=c(0,1,2), conf=confnum, datatype="incidence_freq")
 # Sample‐size‐based R/E curves, separating by "site"
 ggiNEXT(outI, type=1, facet.var="order")+theme_bw(base_size = 18)
-
 ```
 
 ```{r iNextPD, warning=FALSE }
