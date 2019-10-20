@@ -1,5 +1,5 @@
 ---
-title: "Sichuan2014_metabarcode pipeline"
+title: "Sichuan2014_metabarcode pipeline - simplified"
 author: "Douglas Yu and Xiaoyang Wang"
 date: "29/09/2018"
 output: html_document
@@ -7,10 +7,21 @@ editor_options:
   chunk_output_type: console
 ---
 
+# Install packages
+```{r eval=FALSE, include=FALSE}
+install.packages(c("ade4","ape","beanplot","beepr","betapart","BiocManager","boral","car","conflicted","corrplot","data.table","iNEXT","iNextPD","metacoder","mvabund","phyloseq","RColorBrewer","renv","rmarkdown","SpeciesMix","tidyverse","UpSetR","vegan"), dependencies = TRUE)
+
+library(BiocManager)
+BiocManager::install(c("GenomicRanges", "Biobase", "IRanges", "AnnotationDbi", "phyloseq", "GenomicAlignments", "Organism.dplyr")) # install Bioconductor packages
+
+library(devtools)
+install_github("tobiasgf/lulu")
+```
+
 # start R analysis
 ```{r setup, packages}
 library(ape) #read.tree() 
-library(tidyverse) 
+library(tidyverse)
 library(vegan)
 library(beanplot)
 library(car)
@@ -21,54 +32,43 @@ library(boral)
 library(mvabund)
 library(RColorBrewer)
 library(betapart)
-library(forcats)
-library(stringr)
 library(SpeciesMix)
 library(beepr)
 library(corrplot)
-#library(devtools)
-#install_github("tobiasgf/lulu")
 library(lulu)
-#source("https://bioconductor.org/biocLite.R")
-#biocLite("phyloseq")
 library(phyloseq)
 library(data.table)
-library(ggplot2)
 library(metacoder)
-library(tibble)
 library(UpSetR)
-# library(renv)
-# renv::init()
+library(conflicted)
+    conflict_prefer("filter", "dplyr")
+    conflict_prefer("select", "dplyr")
+    # [conflicted] Will prefer dplyr::filter over any other package
 sessionInfo()
-
 ```
 
 #After CROP clustering with 97% similarity
 #run following command on terminal for getting match_list
 vsearch --usearch_global 2libs_CROP97.cluster3507.fasta --db 2libs_CROP97.cluster3507.fasta --self --id .84 --iddef 1 --userout match_list.txt -userfields query+target+id --maxaccepts 0 --query_cov .9 --maxhits 10
 
-# using match list for lulu
+# lulu OTU collapsing
 ```{r code for lulu, eval=FALSE, include=FALSE}
-matchlist <- read.table("lulu_3507/match_list.txt", header=FALSE,as.is=TRUE, stringsAsFactors=FALSE)  # 3507 OTUs
-comLuLu <- read.table("lulu_3507/2libs_CROP97_merge_otu3507.txt", header= T, sep = "\t")
+comLuLu <- read.table("lulu_3507/2libs_CROP97_merge_otu3507.txt", header= T, sep = "\t") # OTU table, 3507 OTUs
+View(comLuLu)
+comLuLu <- column_to_rownames(comLuLu, var = "Cluster")
 
-str(comLuLu)
-rname <- comLuLu[,1]
-comLuLu <- comLuLu[,-1]
-comLuLu <- sapply(comLuLu, function(x) as.numeric(x))
-rownames(comLuLu) <- rname
-comLuLu <- as.data.frame(comLuLu)
+matchlist <- read.table("lulu_3507/match_list.txt", header=FALSE,as.is=TRUE, stringsAsFactors=FALSE)  # use vsearch or usearch or blast to compare every OTU with every OTU and record the OTU pairs that have "high" similarity. Look at column v3 (similarity)
 
-curated_result <- lulu(comLuLu, matchlist) # equivalent to the follow command
+curated_result <- lulu(comLuLu, matchlist) # default parameters:
 # curated_result <- lulu(comLuLu, matchlist, minimum_ratio_type = "min", minimum_ratio = 1, minimum_match = 84, minimum_relative_cooccurence = 0.95)
 
 new_table_lulu <- curated_result$curated_table
+# 3507 collapsed to 1507 OTUs
 ```
 
 #we do phyloseq after lulu
 ```{r phyloseq, eval=FALSE, include=FALSE}
 ########## filter out small OTUs, phyloseq ##
-
 communityAll_t <- new_table_lulu
 
 communityAll <- t(communityAll_t)
