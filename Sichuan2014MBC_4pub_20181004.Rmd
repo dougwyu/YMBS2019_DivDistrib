@@ -9,7 +9,7 @@ editor_options:
 
 # Install packages
 ```{r eval=FALSE, include=FALSE}
-install.packages(c("ade4","ape","beanplot","beepr","betapart","BiocManager","boral","car","conflicted","corrplot","data.table","iNEXT","iNextPD","metacoder","mvabund","phyloseq","RColorBrewer","renv","rmarkdown","SpeciesMix","tidyverse","UpSetR","vegan"), dependencies = TRUE)
+install.packages(c("ade4","ape","beanplot","beepr","betapart","BiocManager","boral","car","conflicted","corrplot","data.table","iNEXT","iNextPD","metacoder","mvabund","phyloseq","RColorBrewer","renv","rmarkdown","SpeciesMix","sjmisc","tidyverse","UpSetR","vegan"), dependencies = TRUE)
 
 library(BiocManager)
 BiocManager::install(c("GenomicRanges", "Biobase", "IRanges", "AnnotationDbi", "phyloseq", "GenomicAlignments", "Organism.dplyr")) # install Bioconductor packages
@@ -66,23 +66,28 @@ new_table_lulu <- curated_result$curated_table
 # 3507 collapsed to 1507 OTUs
 ```
 
-#we do phyloseq after lulu
+# We did not use the DAMe/Begum pipeline, so we still have many false OTUs. From experience, we know that small OTUs are morelikely to be false OTUs. But what is small?  One possible method is that we use a heuristic method from this phyloseq tutorial:
+http://evomics.org/wp-content/uploads/2016/01/phyloseq-Lab-01-Answers.html
+
+First, just run this code chunk and try to understand the logic. Later, you can try to understand the code. 
 ```{r phyloseq, eval=FALSE, include=FALSE}
 ########## filter out small OTUs, phyloseq ##
+## code from 
 communityAll_t <- new_table_lulu
+communityAll <- t(communityAll_t) # t() transpose a table
+TotalCounts <- c(colSums(communityAll)) 
+TotalCounts # total number of reads per OTU added over all samples ("Cluster")
 
-communityAll <- t(communityAll_t)
-TotalCounts <- c(colSums(communityAll))
+tdt = data.table(colnames(communityAll), TotalCounts = colSums(communityAll), OTU = colnames(communityAll)) # data.table() package
 
-tdt = data.table(colnames(communityAll),TotalCounts = colSums(communityAll),OTU = colnames(communityAll))
-
+# histogram of OTU sizes.  You can 
 ggplot(tdt, aes(TotalCounts)) + 
   geom_histogram() + 
   ggtitle("Histogram of Total Counts")
 
-tdt[(TotalCounts <= 0), .N]
-tdt[(TotalCounts <= 1), .N]
-tdt[(TotalCounts <= 2), .N]
+tdt[(TotalCounts <= 0), .N] # no OTUs with 0 reads
+tdt[(TotalCounts <= 1), .N] # 315 OTUs with 1 read (single-read OTUs)
+tdt[(TotalCounts <= 2), .N] # 410 OTUs with 2 reads (two-read OTUs)
 
 taxcumsum = tdt[, .N, by = TotalCounts]
 setkey(taxcumsum, TotalCounts)
@@ -93,38 +98,36 @@ pCumSum = ggplot(taxcumsum, aes(TotalCounts, CumSum)) +
   xlab("Filtering Threshold, Minimum Total Counts") +
   ylab("OTUs Filtered") +
   ggtitle("OTUs that would be filtered vs. the minimum count threshold")
-pCumSum
-pCumSum + xlim(0, 40)
-pCumSum + xlim(0, 50)
-pCumSum + xlim(0, 60)
-pCumSum + xlim(0, 80)
-pCumSum + xlim(0, 100)
+pCumSum # this is a ggplot2 object
 pCumSum + xlim(0, 200)
-pCumSum + xlim(0, 300)
-pCumSum + xlim(0, 400)
-
+ß
 ## phyloseq-class experiment-level object
 ## otu_table()   OTU Table:         [ 3426 taxa and 34 samples ]
 ## sample_data() Sample Data:       [ 34 samples by 11 sample variables ]
 ## tax_table()   Taxonomy Table:    [ 3426 taxa by 7 taxonomic ranks ]
 ## phy_tree()    Phylogenetic Tree: [ 3426 tips and 3424 internal nodes ]
 
-# after viewing the above figures, we choose 44 as the minimum OTU size
-
+# after viewing the above figures, we chose 44 as the minimum OTU size
+# each column is an OTU. We sum the reads per OTU and only keep the columns (OTUs) that have >= 44 reads
 commMBC.44 <- communityAll[ ,colSums(communityAll)>=44] # 594 otus remain
-commMBC.44 <- commMBC.44[ rowSums(commMBC.44)>0,]
+rowSums(commMBC.44) # the total number of reads (summed over all OTUs) per sample (row)
+commMBC.44 <- commMBC.44[rowSums(commMBC.44)>0, ] # for safety, remove any samples that have no OTUs (this doesn't happen in this dataset, but it can happen when you remove a lot of OTUs)
 rowSums(commMBC.44)
-commMBC44copies <- t(commMBC.44)
+commMBC44copies <- t(commMBC.44) # transpose to new table (OTUs in rows, samples in columns)
 
+# save the new reduced dataset
 write.table(commMBC44copies, file = "lulu_3507/2014MBC_44reads_otu594.txt", sep = "\t", row.names = TRUE, col.names = TRUE)
 ```
 
+At this stage, we did some further filtering from 594 OTUs to 543 OTUs. We made a phylogenetic tree and observed a few OTUs on very long branches, and we removed those (see the paper for an explanation), and we also used the Naive Bayesian Classifier to classify reads to class, and we removed all OTUs that were not assigned to Arthropoda. This left us with 543 OTUs, and the new OTU table is stored inside the table 2014MBC_44reads_otu543_LandsatEnv.txt. This table *also* has all the environment metadata per sample. 
+
+This is a safe way to store environment and community data together. Why is this safe?
+
 ## commnunity analyses start from here
 ```{r load and format data for community analyses}
-
 inputfile <- "./data/2014MBC_44reads_otu543_LandsatEnv.txt" # post phyloseq filtering and filtering for trees, using final bioinformatics pipeline with vsearch and RDP Classifier and phyloseq at min20reads, with landsat data
 
-# command from readr package, with options on formatting the columns
+# read table command from readr package, with options on formatting the columns
 gfgMB <- read_tsv(
    inputfile, col_names = TRUE, na = "NA",
    col_types = cols(
@@ -141,35 +144,39 @@ gfgMB <- read_tsv(
      )
  )
 
-gfgMB <- tbl_df(gfgMB)
+gfgMB <- as_tibble(gfgMB) # formats to 'tibble' format, which is more convenient.  It is still a data frame!
+gfgMB
 
-# with(gfgMB, plot(Altitude ~ Elevation_m, col=as.numeric(Habitat)))  # Altitude variable is not reliable;  use Elevation_m instead, which is calculated from DEM
+View(gfgMB) # to see the Cluster columns (the OTUs), look at the top of the window, and you will see "Cols" and some arrowheads. Click on them to scroll right and left.
 ```
 
 ```{r environment dataset}
-# make environment dataset
-habitat <- gfgMB %>% dplyr::select(Site:Simpson_evenness_index)
-habitat <- habitat %>% dplyr::filter(!is.na(Habitat)) # remove taxonomy rows
-colnames(habitat)[11:80] <- paste0("x", colnames(habitat)[11:80]) # column names need to start with a letter
+# to extract the environment metadata into a pure environment dataset:  habitat
+habitat <- gfgMB %>% 
+  select(Site:Elevation_m, Simpson_evenness_index)
 ```
 
-```{r community build}
-community <- gfgMB %>% dplyr::select(starts_with("Cluster"))
+```{r community dataset}
+# to extract the community dataset
+community <- gfgMB %>% 
+  select(starts_with("Cluster")) # dplyr::select() is smart!
 # otuvector <- colnames(community)
-community_t <- t(community)
+community_t <- t(community)  
 community_t <- as.data.frame(community_t)
 community_t <- rownames_to_column(community_t)
-colnames(community_t) <- c("otu", gfgMB$Site) # add column names
+colnames(community_t) <- c("otu", gfgMB$Site) # add column names. This is the OTU X sample table, which is the bioinformatic format
+communityAll <- rotate_df(community_t, cn = TRUE) # sjmisc::rotate_df() to create the sample X OTU table, which is the format used in community statistics
 
-communityAll <- t(community_t)
-colvector <- communityAll[1,] # make a vector of the first row, which has the otu names
-communityAll <- as.data.frame(communityAll)
-colnames(communityAll) <-  colvector # add the otu names to the column names
-communityAll <- communityAll[-1,] # remove first row, which has the column names
-# convert the columns to numeric from factor
-# http://stackoverflow.com/questions/2288485/how-to-convert-a-data-frame-column-to-numeric-type
-communityAll <- sapply(communityAll, function(x) as.numeric(as.character(x))) # sapply applies a function to each column, and the function is:  function(x) as.numeric(as.character(x)).  Cannot convert factors to numeric directly. first convert to character, then to numeric
-communityAll <- as.data.frame(communityAll) # then convert to df
+# alternative method
+# communityAll <- t(community_t) # this is sample X OTU table, which is the format used in community statistics, BUT the OTUs are in the first row, and it should be in the 
+# colvector <- communityAll[1,] # make a vector of the first row, which has the otu names
+# communityAll <- as.data.frame(communityAll)
+# colnames(communityAll) <-  colvector # add the otu names to the column names
+# communityAll <- communityAll[-1,] # remove first row, which has the column names
+# # convert the columns to numeric from factor
+# # http://stackoverflow.com/questions/2288485/how-to-convert-a-data-frame-column-to-numeric-type
+# communityAll <- sapply(communityAll, function(x) as.numeric(as.character(x))) # sapply applies a function to each column, and the function is:  function(x) as.numeric(as.character(x)).  Cannot convert factors to numeric directly. first convert to character, then to numeric
+# communityAll <- as.data.frame(communityAll) # then convert to df
 ```
 
 # visualise a histogram of read number per OTU
@@ -180,54 +187,59 @@ sum(otureads) ## 1,900,539 reads total
 otureads[otureads>5000] <- 5000 # to make the histogram readable
 otuhist <- hist(otureads, breaks = 100)
 text(otuhist$mids, otuhist$counts, cex = 0.5, otuhist$counts, adj = c(.5, -.5), col = "blue3")
+# notice that we have removed the small OTUs.  
 ```
 
 # Starting ecological analysis
-Filter out sites with (1) low reads (<= 100), (2) very low numbers of species
+Filter out *sites* with (1) low reads (<= 100) and/or (2) very low numbers of species
 ```{r filter out sites }
 community <- communityAll
 #community <- t(new_table_lulu)
 community <- as.data.frame(community)
 #sort(colSums(community))
-community[community < 5] <- 0 # set small cells to 0.
+community[community < 5] <- 0 # If an OTU has <5 reads *in a site*, remove it, because the detection is less reliable
 
-habitat$rowsums <- rowSums(community)
+habitat$rowsums <- rowSums(community) # add total OTU read number to the environment dataset
 habitat$sprichness <- specnumber(community, MARGIN = 1) # number of species per site
-# keep only sites that have more than 100 reads (removed 2, still remain 68)
+# keep only sites that have more than 100 reads (removed 2 sites, 68 remain)
 community <- community %>% dplyr::filter(habitat$rowsums > 100)
 habitatN <- habitat %>% dplyr::filter(habitat$rowsums > 100)
-rowSums(community)
+rowSums(community) 
 
-# keep only sites that have >=5 species (removed 68 - 61 = 7 sites)
+# keep only sites that have >=5 species (61 sites remain from original 68 sites)
 community <- community %>% dplyr::filter(habitatN$sprichness >= 5)
-habitatN <- habitatN %>% dplyr::filter(habitatN$sprichness >= 5)
+habitatN <- habitatN %>% dplyr::filter(habitatN$sprichness >= 5) # also drop the sites from the environment dataset
 #sort(colSums(community))
 habitatN <- droplevels(habitatN)
+# after removing some sites, it is possible that some OTUs become very small (their reads were (mostly) present in the sites that were removed). So we remove the OTUs that have been depleted to < 20 reads in total (this is a bit arbitrary)
 community <- community[, colSums(community)>=20] # 7 OTUs removed
 #Cluster31064  Cluster334816  Cluster672922  Cluster932857  Cluster989447  Cluster273565 Cluster1265861
 ```
 
 
 ```{r beanplot of read number by habitat}
-beanplot(rowSums(community)~habitatN$Habitat, col = c("grey", "white"), xlab = "Habitat type", ylab = "Reads number")
+beanplot(rowSums(community)~habitatN$Habitat, col = c("grey", "white"), xlab = "Habitat type", ylab = "Reads number") # observed number of OTUs per habitat type
 # Kampstra, P. Beanplot: A Boxplot Alternative for Visual Comparison of Distributions. Journal of Statistical Software, Code Snippets 28(1). 1-9 (2008) 
 
+# We want to see if the number of reads (the amount of raw data) is roughly equal per habitat (because we are going to compare species richness per habitat, and thus we want to have roughly the same amount of raw data per habitat)
+
+# this is a cool-kids way of doing ANOVA, but using the mvabund package. We just want to 
 nboot <- 999 # set to 999 for publication
 # base model with no levels combined
-reads.glm <- manyglm(rowSums(community) ~ habitatN$Habitat)
+reads.glm <- mvabund::manyglm(rowSums(community) ~ habitatN$Habitat)
 plot(reads.glm)
-anova(reads.glm, cor.type = "shrink", test = "score", show.time = "all", nBoot = nboot)  # p = 0.036, df = 5, score = 8.671, nBoot = 999, 1 min. all read numbers are not significantly defferent from each other
-
+anova(reads.glm, cor.type = "shrink", test = "score", show.time = "all", nBoot = nboot)  # p = 0.036, df = 5, score = 8.671, nBoot = 999, 1 min. The habitats do not have different numbers of reads.
 ```
 
-# we used the taxonomic assignment (RDP classifier) results to built a taxon distribution of all OTUs
+# Metacoder heat trees. we used the taxonomic assignment (RDP classifier) results to build a taxon distribution of all OTUs. 
+# Xiaoyang will explain how we went from 543 to 536 OTUs
 ```{r metacoder, warning=FALSE}
-#### for otus taxa tree
-
 mbc_otus <- read.table("data/forMetacoder/2014MBC_otu536_tax.txt", header = T, sep = "\t")
 mbc_samples <- read.table("data/forMetacoder/2014MBC_sample536.txt", header = T, sep = "\t")
+View(mbc_otus) # notice the taxonomy column (from RDP Classifier) in the OTU table
+View(mbc_samples) # environment metadata table
 
-mbc_otus[mbc_otus>1] <- 1 # using presence/absance data
+mbc_otus[mbc_otus>1] <- 1 # change to presence/absence data
 
 #str(mbc_otus)
 #str(mbc_samples)
@@ -242,59 +254,8 @@ mbc_samples <- as_tibble(mbc_samples)
 #print(mbc_otus)
 #print(mbc_samples)
 
-obj <- parse_tax_data(mbc_otus, class_cols = "lineage", class_sep = ";",
-                      class_key = c(tax_rank = "info", tax_name = "taxon_name"),
-                      class_regex = "^(.+)__(.+)$")
-
-# This returns a taxmap object. The taxmap class is designed to store any number of tables, lists, or vectors associated with taxonomic information and facilitate manipulating the data in a cohesive way. Here is what that object looks like:
-
-print(obj) # or click on the object in the Environment pane
-
-# accounting for un-even sampling
-obj$data$tax_data <- calc_obs_props(obj, "tax_data")
-
-print(obj)
-
-# Getting per-taxon information
-# Currently, we have values for the abundance of each OTU, not each taxon. To get information on the taxa, we can sum the abundance per-taxon like so:
-obj$data$tax_abund <- calc_taxon_abund(obj, "tax_data",
-                                       cols = mbc_samples$Site)
-print(obj)
-# Note that there is now an additional table with one row per taxon.
-# We can also easily calculate the number of samples have reads for each taxon:
-obj$data$tax_occ <- calc_n_samples(obj, "tax_abund", groups = mbc_samples$Habitat)
-print(obj)
-
-# Plotting taxonomic data
-# Now that we have per-taxon information, we can plot the information using heat trees. The code below plots the number of “Nose” samples that have reads for each taxon. It also plots the number of OTUs assigned to each taxon in the overall dataset.
-
-heat_tree(obj, 
-          node_label = obj$taxon_names(),
-          node_size = obj$n_obs(),
-          node_color = obj$data$tax_occ$NF, 
-          node_size_axis_label = "OTU count",
-          node_color_axis_label = "Samples with reads")
-
-# Comparing any number of treatments/groups
-obj$data$diff_table <- compare_groups(obj, dataset = "tax_abund",
-                                      cols = mbc_samples$Site,
-                                      groups = mbc_samples$Habitat)
-print(obj$data$diff_table)
-heat_tree_matrix(obj,
-                 data = "diff_table",
-                 node_size = n_obs,
-                 node_label = taxon_names,
-                 node_color = log2_median_ratio,
-                 node_color_range = diverging_palette(),
-                 node_color_trans = "linear",
-                 node_color_interval = c(-3, 3),
-                 edge_color_interval = c(-3, 3),
-                 node_size_axis_label = "Number of OTUs",
-                 node_color_axis_label = "Log2 ratio median proportions")
-
-# page(compare_groups) #check codes of compare_groups, change "median" to "mean"
-
-##### remove CL group to see differences in forest and plantations only 
+# metacoder code
+##### first remove CL group to see differences in forest and plantations only 
 otus_without_CL <- mbc_otus %>% dplyr::select(-c(CL01:CL16))
 samples_without_CL <- mbc_samples %>% dplyr::filter(mbc_samples$Habitat %in% c("BB", "EC", "JC", "MP", "NF"))
 
@@ -342,12 +303,66 @@ heat_tree(objF,
           node_size_axis_label = "OTU count",
           node_color_axis_label = "Log2 ratio median proportions")
 
-# Comparing any number of treatments/groups
+# Comparing any number of treatments/groups. We are going to pairwise-compare all the habitats
 objF$data$diff_table <- compare_groups(objF, dataset = "tax_abund",
                                       cols = samples_without_CL$Site,
                                       groups = samples_without_CL$Habitat)
 print(objF$data$diff_table)
 heat_tree_matrix(objF,
+                 data = "diff_table",
+                 node_size = n_obs, # number of OTUs with that taxon
+                 node_label = taxon_names,
+                 node_color = log2_median_ratio,
+                 node_color_range = diverging_palette(),
+                 node_color_trans = "linear",
+                 node_color_interval = c(-3, 3),
+                 edge_color_interval = c(-3, 3),
+                 node_size_axis_label = "Number of OTUs",
+                 node_color_axis_label = "Log2 ratio median proportions")
+```
+
+DO NOT RUN THIS CHUNK.  This is the code for metacoder heat trees that include the CropLand (CL) samples
+```{r metacoder, eval=FALSE, include=FALSE}
+obj <- parse_tax_data(mbc_otus, class_cols = "lineage", class_sep = ";",
+                      class_key = c(tax_rank = "info", tax_name = "taxon_name"),
+                      class_regex = "^(.+)__(.+)$")
+# This returns a taxmap object. The taxmap class is designed to store any number of tables, lists, or vectors associated with taxonomic information and facilitate manipulating the data in a cohesive way. Here is what that object looks like:
+
+print(obj) # or click on the object in the Environment pane
+
+# accounting for un-even sampling
+obj$data$tax_data <- calc_obs_props(obj, "tax_data")
+
+print(obj)
+
+# Getting per-taxon information
+# Currently, we have values for the abundance of each OTU, not each taxon. To get information on the taxa, we can sum the abundance per-taxon like so:
+obj$data$tax_abund <- calc_taxon_abund(obj, "tax_data",
+                                       cols = mbc_samples$Site)
+print(obj)
+# Note that there is now an additional table with one row per taxon.
+# We can also easily calculate the number of samples have reads for each taxon:
+obj$data$tax_occ <- calc_n_samples(obj, "tax_abund", groups = mbc_samples$Habitat)
+print(obj)
+
+# Plotting taxonomic data
+# Now that we have per-taxon information, we can plot the information using heat trees. The code below plots the number of “Nose” samples that have reads for each taxon. It also plots the number of OTUs assigned to each taxon in the overall dataset.
+
+# takes a minute, and the plot window must be big
+heat_tree(obj, 
+          node_label = obj$taxon_names(),
+          node_size = obj$n_obs(),
+          node_color = obj$data$tax_occ$NF, 
+          node_size_axis_label = "OTU count",
+          node_color_axis_label = "Samples with reads")
+
+# Comparing any number of treatments/groups (we compare the different habitats to each other)
+obj$data$diff_table <- compare_groups(obj, dataset = "tax_abund",
+                                      cols = mbc_samples$Site,
+                                      groups = mbc_samples$Habitat)
+print(obj$data$diff_table) # print the output table
+# now make the pairwise comparison heat trees
+heat_tree_matrix(obj,
                  data = "diff_table",
                  node_size = n_obs,
                  node_label = taxon_names,
@@ -359,8 +374,11 @@ heat_tree_matrix(objF,
                  node_size_axis_label = "Number of OTUs",
                  node_color_axis_label = "Log2 ratio median proportions")
 
+# page(compare_groups) #check codes of compare_groups, change "median" to "mean"
+
 
 ```
+
 
 # Alpha Diversity
 ```{r make presence/absence dataset}
@@ -370,24 +388,21 @@ rownames(communityB) # 61 rows = sites
 ```
 
 ```{r beanplot}
-#beanplot(specnumber(communityB)~habitatN$Habitat, col = c("grey", "white"))
-
-beanplot(specnumber(communityB)~habitatN$Habitat, col = c("grey", "white"), ylab = "Species richness")
+beanplot(specnumber(communityB)~habitatN$Habitat, col = c("grey", "white"), ylab = "Species richness") # numbers of observed species per site. Observed species are an underestimate of the true species richness, so now we estimate how much true species richness there is per habitat
 ```
 
 ```{r each land-cover type community data}
+# create separate community datasets for each habitat
 BB <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("BB"))
 CL <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("CL"))
 EC <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("EC"))
 JC <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("JC"))
 MP <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("MP"))
 NF <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("NF"))
-
 ```
 
-Test 2
+This is a naive test. 
 ```{r t-test for observed species richness}
-
 BB_obs <- rowSums(BB)
 CL_obs <- rowSums(CL)
 EC_obs <- rowSums(EC)
@@ -423,8 +438,7 @@ p_values.corr.fdr
 # traditional Chao
 ```{r specpool, }
 ######## otu table with original reads number
-(pool1 <- specpool(communityB, habitatN$Habitat))
-
+(pool1 <- vegan::specpool(communityB, habitatN$Habitat))
 ```
 
    Species     chao  chao.se     jack1 jack1.se    jack2     boot   boot.se  n
@@ -435,26 +449,27 @@ JC      85 209.6154 48.52236 139.00000 23.08246 177.7556 107.5053 10.816630 10
 MP     119 405.5079 98.01090 203.44444 33.92075 267.8056 153.4993 14.358124  9
 NF     210 507.3394 72.71267 346.61538 48.44615 445.4744 266.7256 22.180423 13
 
-```{r barchart for estimating value}
-es_value <- pool1$chao
-se <- pool1$chao.se
+```{r barchart for Chao2 richness estimates}
+es_value <- pool1$chao # from the chao2 output file
+se <- pool1$chao.se # from the chao2 output file
 # es_value <- c(185.9796, 115.4592, 209.6154, 405.5079, 336.1658, 507.3394)
 # se <- c(39.89775, 22.33722, 48.52236, 98.01090, 37.44452, 72.71267)
 
+# function to generate error bar limits for the barchart
 error.bar <- function(x, y, upper, lower=upper, length=0.1,...){
 if(length(x) != length(y) | length(y) !=length(lower) | length(lower) != length(upper))
 stop("vectors must be same length")
 arrows(x,y+upper, x, y-lower, angle=90, code=3, length=length, ...)
 }
 
-par(mfrow=c(1,2))
+par(mfrow=c(1,1))
 bar_es <- barplot(es_value, names.arg = c("BB", "EC", "JC", "MP", "CL", "NF"), col = "lightblue", ylim = c(0, 600), border = NA, ylab = "Species richness estimates")
-error.bar(bar_es,es_value, se)
+error.bar(bar_es, es_value, se)
 par(mfrow=c(1,1))
 ```
 
-```{r Welch-t test for Chao}
-############ This function (t.test2) will calculate Welch's test
+```{r Welch-t test for chao2 results}
+############ This function (t.test2) will calculate Welch's test (t-test when you only have means (m) and standard deviations (s))
 t.test2 <- function(m1, m2, s1, s2, n1, n2, m0=0, equal.variance=FALSE)
 {
   if( equal.variance==FALSE ) 
@@ -531,23 +546,27 @@ p_values.corr.fdr
 
 ```
 
-```{r make community abun data}
+
+iNext analyses
+```{r make community dataset for iNext}
 cname <- c("BB","CL","EC","JC","MP","NF")
 
 comm4inext_abun <- matrix(c(colSums(BB), colSums(CL), colSums(EC), colSums(JC), colSums(MP), colSums(NF)), ncol = 6) # BB, CL, EC, JC, MP, NF from 'r t-test for observed species richness'
-
 colnames(comm4inext_abun) <- cname
+
 colnameBB <- colnames(BB)
 rownames(comm4inext_abun) <- colnameBB
 
+View(comm4inext_abun)
 ```
 
 # Interpolation and extrapolation of Hill number 
 ```{r iNEXT}
 # http://chao.stat.nthu.edu.tw/wordpress/wp-content/uploads/software/iNEXT_UserGuide.pdf
 
-comm4inext <- rbind(c(nrow(BB), nrow(CL), nrow(EC), nrow(JC), nrow(MP), nrow(NF)), comm4inext_abun) #
-#comm4inext
+comm4inext <- rbind(c(nrow(BB), nrow(CL), nrow(EC), nrow(JC), nrow(MP), nrow(NF)), comm4inext_abun) 
+# the first row is the number of sites per habitat
+View(comm4inext)
 
 confnum=0.95 # set confidence here
 outcomm0 <- iNEXT(comm4inext, q=0, conf=confnum, datatype="incidence_freq")
