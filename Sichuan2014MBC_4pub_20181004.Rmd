@@ -783,10 +783,10 @@ mcmc.control <- list(n.burnin = 300, n.iteration = 1000, n.thin = 30, seed = 123
 
 
 # set up model
-commB.fit.b3.4.none <- boral(communityB, family = "binomial", num.lv = 2, row.eff = "random", mcmc.control = mcmc.control4, save.model = TRUE); beep(sound = 1)
+commB.fit.b3.4.none <- boral(communityB, family = "binomial", num.lv = 2, row.eff = "random", mcmc.control = mcmc.control, save.model = TRUE); beep(sound = 1)
 
 # save output in case i want to do other analyses on it later
-saveRDS(commB.fit.b3.4.none, "boral_commB.fit.b3.4.RDS")
+# saveRDS(commB.fit.b3.4.none, "boral_commB.fit.b3.4.RDS")
 # commB.fit.b3.4.none <- readRDS("boral_commB.fit.b3.4.RDS") # to restore
 
 summary(commB.fit.b3.4.none)
