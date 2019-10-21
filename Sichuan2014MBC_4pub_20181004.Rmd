@@ -9,7 +9,7 @@ editor_options:
 
 # Install packages
 ```{r eval=FALSE, include=FALSE}
-install.packages(c("ade4","ape","beanplot","beepr","betapart","BiocManager","boral","car","conflicted","corrplot","data.table","iNEXT","iNextPD","metacoder","mvabund","phyloseq","RColorBrewer","renv","rmarkdown","SpeciesMix","sjmisc","tidyverse","UpSetR","vegan"), dependencies = TRUE)
+install.packages(c("ade4", "ape", "beanplot", "beepr", "betapart", "BiocManager", "boral", "car", "conflicted", "corrplot", "data.table", "iNEXT", "iNextPD", "metacoder", "mvabund", "phyloseq", "RColorBrewer", "rmarkdown", "SpeciesMix", "sjmisc", "tidyverse", "UpSetR", "vegan", "zetadiv"), dependencies = TRUE)
 
 library(BiocManager)
 BiocManager::install(c("GenomicRanges", "Biobase", "IRanges", "AnnotationDbi", "phyloseq", "GenomicAlignments", "Organism.dplyr")) # install Bioconductor packages
@@ -40,10 +40,12 @@ library(phyloseq)
 library(data.table)
 library(metacoder)
 library(UpSetR)
+library(sjmisc)
 library(conflicted)
     conflict_prefer("filter", "dplyr")
     conflict_prefer("select", "dplyr")
-    # [conflicted] Will prefer dplyr::filter over any other package
+    # R will prefer dplyr::filter and select over any other package
+    # filter and select are verbs used by multiple packages
 sessionInfo()
 ```
 
@@ -54,8 +56,8 @@ vsearch --usearch_global 2libs_CROP97.cluster3507.fasta --db 2libs_CROP97.cluste
 # lulu OTU collapsing
 ```{r code for lulu, eval=FALSE, include=FALSE}
 comLuLu <- read.table("lulu_3507/2libs_CROP97_merge_otu3507.txt", header= T, sep = "\t") # OTU table, 3507 OTUs
-View(comLuLu)
 comLuLu <- column_to_rownames(comLuLu, var = "Cluster")
+View(comLuLu)
 
 matchlist <- read.table("lulu_3507/match_list.txt", header=FALSE,as.is=TRUE, stringsAsFactors=FALSE)  # use vsearch or usearch or blast to compare every OTU with every OTU and record the OTU pairs that have "high" similarity. Look at column v3 (similarity)
 
@@ -74,9 +76,10 @@ First, just run this code chunk and try to understand the logic. Later, you can 
 ########## filter out small OTUs, phyloseq ##
 ## code from 
 communityAll_t <- new_table_lulu
-communityAll <- t(communityAll_t) # t() transpose a table
+communityAll <- rotate_df(communityAll_t) # sjmisc
+# communityAll <- t(communityAll_t) # base R:  t() transpose a table
 TotalCounts <- c(colSums(communityAll)) 
-TotalCounts # total number of reads per OTU added over all samples ("Cluster")
+TotalCounts # number of reads per OTU ("Cluster") (summed over all samples)
 
 tdt = data.table(colnames(communityAll), TotalCounts = colSums(communityAll), OTU = colnames(communityAll)) # data.table() package
 
@@ -87,8 +90,10 @@ ggplot(tdt, aes(TotalCounts)) +
 
 tdt[(TotalCounts <= 0), .N] # no OTUs with 0 reads
 tdt[(TotalCounts <= 1), .N] # 315 OTUs with 1 read (single-read OTUs)
-tdt[(TotalCounts <= 2), .N] # 410 OTUs with 2 reads (two-read OTUs)
+tdt[(TotalCounts <= 2), .N] # 410 OTUs with <=2 reads (two-read OTUs)
+tdt[(TotalCounts <= 3), .N] # 476 OTUs with <=3 reads (two-read OTUs)
 
+# these are data.table commands, and I am only following the phyloseq tutorial
 taxcumsum = tdt[, .N, by = TotalCounts]
 setkey(taxcumsum, TotalCounts)
 taxcumsum[, CumSum := cumsum(N)]
@@ -98,30 +103,37 @@ pCumSum = ggplot(taxcumsum, aes(TotalCounts, CumSum)) +
   xlab("Filtering Threshold, Minimum Total Counts") +
   ylab("OTUs Filtered") +
   ggtitle("OTUs that would be filtered vs. the minimum count threshold")
-pCumSum # this is a ggplot2 object
+pCumSum # this is the ggplot2 object
 pCumSum + xlim(0, 200)
-ß
+
 ## phyloseq-class experiment-level object
 ## otu_table()   OTU Table:         [ 3426 taxa and 34 samples ]
 ## sample_data() Sample Data:       [ 34 samples by 11 sample variables ]
 ## tax_table()   Taxonomy Table:    [ 3426 taxa by 7 taxonomic ranks ]
 ## phy_tree()    Phylogenetic Tree: [ 3426 tips and 3424 internal nodes ]
 
-# after viewing the above figures, we chose 44 as the minimum OTU size
+# after viewing the above figure, we chose 44 as the minimum OTU size
 # each column is an OTU. We sum the reads per OTU and only keep the columns (OTUs) that have >= 44 reads
 commMBC.44 <- communityAll[ ,colSums(communityAll)>=44] # 594 otus remain
 rowSums(commMBC.44) # the total number of reads (summed over all OTUs) per sample (row)
 commMBC.44 <- commMBC.44[rowSums(commMBC.44)>0, ] # for safety, remove any samples that have no OTUs (this doesn't happen in this dataset, but it can happen when you remove a lot of OTUs)
 rowSums(commMBC.44)
-commMBC44copies <- t(commMBC.44) # transpose to new table (OTUs in rows, samples in columns)
+commMBC44copies <- rotate_df(commMBC.44) # transpose to new table (OTUs in rows, samples in columns)
+# commMBC44copies <- t(commMBC.44) 
 
 # save the new reduced dataset
 write.table(commMBC44copies, file = "lulu_3507/2014MBC_44reads_otu594.txt", sep = "\t", row.names = TRUE, col.names = TRUE)
 ```
 
-At this stage, we did some further filtering from 594 OTUs to 543 OTUs. We made a phylogenetic tree and observed a few OTUs on very long branches, and we removed those (see the paper for an explanation), and we also used the Naive Bayesian Classifier to classify reads to class, and we removed all OTUs that were not assigned to Arthropoda. This left us with 543 OTUs, and the new OTU table is stored inside the table 2014MBC_44reads_otu543_LandsatEnv.txt. This table *also* has all the environment metadata per sample. 
+At this stage, we did some further filtering outside of R. 
 
-This is a safe way to store environment and community data together. Why is this safe?
+32 OTUs removed after translating to amino acids and finding that they have stop codons (possible NUMTs). 
+18 OTUs removed because they were assigned to non-Arthropoda taxa (using Naive Bayesian Classifier)
+1 OTU removed because after BLASTing to an Arthropoda reference database (our own), it had a low similarity (so probably not Arthropoda)
+
+This left us with 543 OTUs, and the new OTU table is stored inside the table 2014MBC_44reads_otu543_LandsatEnv.txt. This table *also* has all the environment metadata per sample. 
+
+This is a safe way to store environment and community data together. Why is this safe? What is the danger?
 
 ## commnunity analyses start from here
 ```{r load and format data for community analyses}
@@ -160,14 +172,19 @@ habitat <- gfgMB %>%
 # to extract the community dataset
 community <- gfgMB %>% 
   select(starts_with("Cluster")) # dplyr::select() is smart!
-# otuvector <- colnames(community)
-community_t <- t(community)  
-community_t <- as.data.frame(community_t)
-community_t <- rownames_to_column(community_t)
-colnames(community_t) <- c("otu", gfgMB$Site) # add column names. This is the OTU X sample table, which is the bioinformatic format
-communityAll <- rotate_df(community_t, cn = TRUE) # sjmisc::rotate_df() to create the sample X OTU table, which is the format used in community statistics
+communityAll <- gfgMB %>% 
+  select(Site) %>% 
+  bind_cols(community) %>% 
+  column_to_rownames(var = "Site")
 
-# alternative method
+# alternative method 1
+# community_t <- t(community)  
+# community_t <- as.data.frame(community_t)
+# community_t <- rownames_to_column(community_t)
+# colnames(community_t) <- c("otu", gfgMB$Site) # add column names. This is the OTU X sample table, which is the bioinformatic format
+# communityAll <- rotate_df(community_t, cn = TRUE) # sjmisc::rotate_df() to create the sample X OTU table, which is the format used in community statistics
+
+# alternative method 2
 # communityAll <- t(community_t) # this is sample X OTU table, which is the format used in community statistics, BUT the OTUs are in the first row, and it should be in the 
 # colvector <- communityAll[1,] # make a vector of the first row, which has the otu names
 # communityAll <- as.data.frame(communityAll)
@@ -195,12 +212,13 @@ Filter out *sites* with (1) low reads (<= 100) and/or (2) very low numbers of sp
 ```{r filter out sites }
 community <- communityAll
 #community <- t(new_table_lulu)
-community <- as.data.frame(community)
+# community <- as.data.frame(community)
 #sort(colSums(community))
 community[community < 5] <- 0 # If an OTU has <5 reads *in a site*, remove it, because the detection is less reliable
 
 habitat$rowsums <- rowSums(community) # add total OTU read number to the environment dataset
 habitat$sprichness <- specnumber(community, MARGIN = 1) # number of species per site
+
 # keep only sites that have more than 100 reads (removed 2 sites, 68 remain)
 community <- community %>% dplyr::filter(habitat$rowsums > 100)
 habitatN <- habitat %>% dplyr::filter(habitat$rowsums > 100)
@@ -212,10 +230,11 @@ habitatN <- habitatN %>% dplyr::filter(habitatN$sprichness >= 5) # also drop the
 #sort(colSums(community))
 habitatN <- droplevels(habitatN)
 # after removing some sites, it is possible that some OTUs become very small (their reads were (mostly) present in the sites that were removed). So we remove the OTUs that have been depleted to < 20 reads in total (this is a bit arbitrary)
-community <- community[, colSums(community)>=20] # 7 OTUs removed
+community <- community[, colSums(community)>=20] # 7 OTUs removed, leaving 536 OTUs
 #Cluster31064  Cluster334816  Cluster672922  Cluster932857  Cluster989447  Cluster273565 Cluster1265861
 ```
 
+We now have our (almost) final dataset. We can start doing analyses.
 
 ```{r beanplot of read number by habitat}
 beanplot(rowSums(community)~habitatN$Habitat, col = c("grey", "white"), xlab = "Habitat type", ylab = "Reads number") # observed number of OTUs per habitat type
@@ -231,8 +250,7 @@ plot(reads.glm)
 anova(reads.glm, cor.type = "shrink", test = "score", show.time = "all", nBoot = nboot)  # p = 0.036, df = 5, score = 8.671, nBoot = 999, 1 min. The habitats do not have different numbers of reads.
 ```
 
-# Metacoder heat trees. we used the taxonomic assignment (RDP classifier) results to build a taxon distribution of all OTUs. 
-# Xiaoyang will explain how we went from 543 to 536 OTUs
+# Metacoder heat trees. Fewer OTUs because we have filtered out some sites with low total number of reads (low data) and/or low total number of species. Now 536 OTUs. 
 ```{r metacoder, warning=FALSE}
 mbc_otus <- read.table("data/forMetacoder/2014MBC_otu536_tax.txt", header = T, sep = "\t")
 mbc_samples <- read.table("data/forMetacoder/2014MBC_sample536.txt", header = T, sep = "\t")
@@ -255,6 +273,7 @@ mbc_samples <- as_tibble(mbc_samples)
 #print(mbc_samples)
 
 # metacoder code
+# This code comes directly from the metacoder tutorial
 ##### first remove CL group to see differences in forest and plantations only 
 otus_without_CL <- mbc_otus %>% dplyr::select(-c(CL01:CL16))
 samples_without_CL <- mbc_samples %>% dplyr::filter(mbc_samples$Habitat %in% c("BB", "EC", "JC", "MP", "NF"))
@@ -289,7 +308,7 @@ objF$data$tax_abund <- calc_taxon_abund(objF, "tax_data",
                                        cols = samples_without_CL$Site)
 print(objF)
 # Note that there is now an additional table with one row per taxon.
-# We can also easily calculate the number of samples have reads for each taxon:
+# We can also easily calculate the number of samples that have reads for each taxon:
 objF$data$tax_occ <- calc_n_samples(objF, "tax_abund", groups = samples_without_CL$Habitat)
 print(objF)
 
@@ -303,7 +322,7 @@ heat_tree(objF,
           node_size_axis_label = "OTU count",
           node_color_axis_label = "Log2 ratio median proportions")
 
-# Comparing any number of treatments/groups. We are going to pairwise-compare all the habitats
+# Pairwise comparisons of all the habitats
 objF$data$diff_table <- compare_groups(objF, dataset = "tax_abund",
                                       cols = samples_without_CL$Site,
                                       groups = samples_without_CL$Habitat)
@@ -382,7 +401,7 @@ heat_tree_matrix(obj,
 
 # Alpha Diversity
 ```{r make presence/absence dataset}
-communityB <- community
+communityB <- community # B for binary
 communityB[communityB>1] <- 1 # binary
 rownames(communityB) # 61 rows = sites
 ```
@@ -391,51 +410,7 @@ rownames(communityB) # 61 rows = sites
 beanplot(specnumber(communityB)~habitatN$Habitat, col = c("grey", "white"), ylab = "Species richness") # numbers of observed species per site. Observed species are an underestimate of the true species richness, so now we estimate how much true species richness there is per habitat
 ```
 
-```{r each land-cover type community data}
-# create separate community datasets for each habitat
-BB <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("BB"))
-CL <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("CL"))
-EC <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("EC"))
-JC <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("JC"))
-MP <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("MP"))
-NF <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("NF"))
-```
-
-This is a naive test. 
-```{r t-test for observed species richness}
-BB_obs <- rowSums(BB)
-CL_obs <- rowSums(CL)
-EC_obs <- rowSums(EC)
-JC_obs <- rowSums(JC)
-MP_obs <- rowSums(MP)
-NF_obs <- rowSums(NF)
-
-vec <- rep(NA, 15)
-vec[1] <- t.test(BB_obs, CL_obs)[["p.value"]]
-vec[2] <- t.test(BB_obs, EC_obs)[["p.value"]]
-vec[3] <- t.test(BB_obs, JC_obs)[["p.value"]]
-vec[4] <- t.test(BB_obs, MP_obs)[["p.value"]]
-vec[5] <- t.test(BB_obs, NF_obs)[["p.value"]]
-vec[6] <- t.test(CL_obs, EC_obs)[["p.value"]]
-vec[7] <- t.test(CL_obs, JC_obs)[["p.value"]]
-vec[8] <- t.test(CL_obs, MP_obs)[["p.value"]]
-vec[9] <- t.test(CL_obs, NF_obs)[["p.value"]]
-vec[10] <- t.test(EC_obs, JC_obs)[["p.value"]]
-vec[11] <- t.test(EC_obs, MP_obs)[["p.value"]]
-vec[12] <- t.test(EC_obs, NF_obs)[["p.value"]]
-vec[13] <- t.test(JC_obs, MP_obs)[["p.value"]]
-vec[14] <- t.test(JC_obs, NF_obs)[["p.value"]]
-vec[15] <- t.test(MP_obs, NF_obs)[["p.value"]]
-
-p_values <- vec
-# p_values <- c(0.0244, 0.2402, 0.1078, 0.7774, 0.2095, 0.0027, 0.0004, 0.0142, 0.6047, 0.7341, 0.3663, 0.0429, 0.1877, 0.0202, 0.1514)
-p_values.corr.fdr<-p.adjust(p_values, method = "fdr", n = length(p_values)) 
-p_values.corr.fdr
-# 0.073117886 0.327556823 0.231087068 0.777408689 0.314280549 0.020438641 0.005402277 0.070797333
-# 0.697709778 0.777408689 0.457845891 0.107319818 0.312783984 0.073117886 0.283870359
-```
-
-# traditional Chao
+# traditional Chao2 estimate for species richness
 ```{r specpool, }
 ######## otu table with original reads number
 (pool1 <- vegan::specpool(communityB, habitatN$Habitat))
@@ -546,27 +521,35 @@ p_values.corr.fdr
 
 ```
 
-
 iNext analyses
 ```{r make community dataset for iNext}
+# create separate community datasets for each habitat
+BB <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("BB"))
+CL <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("CL"))
+EC <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("EC"))
+JC <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("JC"))
+MP <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("MP"))
+NF <- communityB %>% dplyr::filter(habitatN$Habitat %in% c("NF"))
+
 cname <- c("BB","CL","EC","JC","MP","NF")
 
 comm4inext_abun <- matrix(c(colSums(BB), colSums(CL), colSums(EC), colSums(JC), colSums(MP), colSums(NF)), ncol = 6) # BB, CL, EC, JC, MP, NF from 'r t-test for observed species richness'
 colnames(comm4inext_abun) <- cname
 
 colnameBB <- colnames(BB)
-rownames(comm4inext_abun) <- colnameBB
+rownames(comm4inext_abun) <- colnameBB # add OTU names to the rownames
 
 View(comm4inext_abun)
+
+# add a first row that is the number of sites per habitat
+comm4inext <- rbind(c(nrow(BB), nrow(CL), nrow(EC), nrow(JC), nrow(MP), nrow(NF)), comm4inext_abun) 
+View(comm4inext)
+# e.g. Cluster1003060 is observed in 2 of the 7 EC habitat samples
 ```
 
 # Interpolation and extrapolation of Hill number 
 ```{r iNEXT}
 # http://chao.stat.nthu.edu.tw/wordpress/wp-content/uploads/software/iNEXT_UserGuide.pdf
-
-comm4inext <- rbind(c(nrow(BB), nrow(CL), nrow(EC), nrow(JC), nrow(MP), nrow(NF)), comm4inext_abun) 
-# the first row is the number of sites per habitat
-View(comm4inext)
 
 confnum=0.95 # set confidence here
 outcomm0 <- iNEXT(comm4inext, q=0, conf=confnum, datatype="incidence_freq")
@@ -577,17 +560,20 @@ ChaoShannon(comm4inext, datatype="incidence_freq")
 
 outI <- iNEXT(comm4inext, q=c(0,1,2), conf=confnum, datatype="incidence_freq")
 # Sample‐size‐based R/E curves, separating by "site"
-ggiNEXT(outI, type=1, facet.var="order")+theme_bw(base_size = 18)
+ggiNEXT(outI, type=1, facet.var="order") + theme_bw(base_size = 18)
 ```
 
+But we do not fully trust our OTUs.  It is very possible that we have 'oversplit' (some of) our OTUs. How do we compare alpha diversity? One way is to use phylogenetic diversity:  how much total branch length is represented by each habitat (on average)?  If we use PD (phylogenetic diversity), then 'oversplit OTUs" should be near each other on the tree (different leaves on the same branch), and the multiple OTUs will add only a little additional branch length. 
+
+Thus, we made a phylogenetic tree from our aligned OTUs, and we use iNextPD.
 ```{r iNextPD, warning=FALSE }
-commPD <- communityB
+commPD <- communityB # sample X OTU table, binary
 # commPD$Cluster418132 #
 # commPD$Cluster636975 #
 # commPD$Cluster549885 #
 commPD$Cluster99619
 
-#remove 3 OTUs with very long branches
+#remove 3 OTUs with very long branches in the tree
 commPD$Cluster418132 <- NULL
 commPD$Cluster636975 <- NULL
 commPD$Cluster549885 <- NULL
@@ -604,6 +590,7 @@ colnames(comm4inextPD) <- cname
 colnameBB <- colnames(BB)
 rownames(comm4inextPD) <- colnameBB
 
+# this is the phylogeny of the OTUs (without the )
 MLtree.tre <- read.table("./data/2014MBC_535otu-2collembola_align533.newick")
 ML.tre <- ade4::newick2phylog(MLtree.tre$V1)
 ML.lab <- rownames(comm4inextPD)
@@ -780,12 +767,12 @@ stressplot(community.jmds)
 ## boral
 Tested different error families (testing code is archived down below).  Based on residuals, decided on family = "binomial," which is good because the dataset is presence/absence. Using row.effect = "random" to get a composition-only analysis.   Now rerun with many more iterations
 
-# This takes a long time to run, should run overnight
+# This takes a long time to run, should run overnight when using mcmc.control4 parameters
 ```{r boral high iterations}
 # set up MCMC parameters
-# mcmc.control <- list(n.burnin = 300, n.iteration = 1000, n.thin = 30, seed = 123) # for debugging
+mcmc.control <- list(n.burnin = 300, n.iteration = 1000, n.thin = 30, seed = 123) # for debugging
 
-mcmc.control4 <- list(n.burnin = 10000, n.iteration = 40000, n.thin = 30) 
+# mcmc.control4 <- list(n.burnin = 10000, n.iteration = 40000, n.thin = 30) # for paper publishing
 
 # Set up priors
 # Francis Hui suggests trying different priors to stabilise sampling for sparse matrices (such as we have).  This isn't as important as getting the mcmc.control parameters right
