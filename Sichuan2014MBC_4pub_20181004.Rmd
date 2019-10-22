@@ -8,7 +8,7 @@ editor_options:
 ---
 
 # Install packages
-```{r eval=FALSE, include=FALSE}
+```{r install packages if needed, eval=FALSE, include=FALSE}
 install.packages(c("ade4", "ape", "beanplot", "beepr", "betapart", "BiocManager", "boral", "car", "conflicted", "corrplot", "data.table", "iNEXT", "iNextPD", "metacoder", "mvabund", "phyloseq", "RColorBrewer", "rmarkdown", "SpeciesMix", "sjmisc", "tidyverse", "UpSetR", "vegan", "zetadiv"), dependencies = TRUE)
 
 library(BiocManager)
@@ -19,7 +19,7 @@ install_github("tobiasgf/lulu")
 ```
 
 # start R analysis
-```{r setup, packages}
+```{r setup, load packages}
 library(ape) #read.tree() 
 library(tidyverse)
 library(vegan)
@@ -217,7 +217,7 @@ community <- communityAll
 community[community < 5] <- 0 # If an OTU has <5 reads *in a site*, remove it, because the detection is less reliable
 
 habitat$rowsums <- rowSums(community) # add total OTU read number to the environment dataset
-habitat$sprichness <- specnumber(community, MARGIN = 1) # number of species per site
+habitat$sprichness <- vegan::specnumber(community, MARGIN = 1) # number of species per site
 
 # keep only sites that have more than 100 reads (removed 2 sites, 68 remain)
 community <- community %>% dplyr::filter(habitat$rowsums > 100)
@@ -432,13 +432,13 @@ se <- pool1$chao.se # from the chao2 output file
 
 # function to generate error bar limits for the barchart
 error.bar <- function(x, y, upper, lower=upper, length=0.1,...){
-if(length(x) != length(y) | length(y) !=length(lower) | length(lower) != length(upper))
-stop("vectors must be same length")
-arrows(x,y+upper, x, y-lower, angle=90, code=3, length=length, ...)
+  if(length(x) != length(y) | length(y) !=length(lower) | length(lower) != length(upper))
+    stop("vectors must be same length")
+  arrows(x,y+upper, x, y-lower, angle=90, code=3, length=length, ...)
 }
 
 par(mfrow=c(1,1))
-bar_es <- barplot(es_value, names.arg = c("BB", "EC", "JC", "MP", "CL", "NF"), col = "lightblue", ylim = c(0, 600), border = NA, ylab = "Species richness estimates")
+bar_es <- barplot(es_value, names.arg = c("BB", "CL", "EC", "JC", "MP", "NF"), col = "lightblue", ylim = c(0, 600), border = NA, ylab = "Species richness estimates")
 error.bar(bar_es, es_value, se)
 par(mfrow=c(1,1))
 ```
@@ -683,7 +683,7 @@ ALL.dist.jtu.jmds <- metaMDS(ALL.dist.subset)
 ALL.dist.jtu.jmds <- metaMDS(ALL.dist.subset, previous.best = ALL.dist.jne.jmds)
 stressplot(ALL.dist.jtu.jmds)
 
-
+par(mfrow=c(1,1))
 # , ylim = c(-0.5, 0.5), xlim = c(-0.4, 0.4)
 par(mfrow=c(2,2))
 colvec <- brewer.pal(5, "Set1")
@@ -718,7 +718,8 @@ par(mfrow=c(1,1))
 
 # Total beta diversity NMDS is correlated with turnover-only beta diversity 
 ```{r}
-protest(community.jmds, ALL.dist.jtu.jmds)
+protestobj <- protest(community.jmds, ALL.dist.jtu.jmds)
+plot(protestobj)
 ```
 
 Call:
@@ -761,6 +762,7 @@ communityB <- communityB[, which(specnumber(communityB, MARGIN=2) > 1)]
 ### do NMDS analysis to quickly see patterns ####
 community.jmds <- metaMDS(communityB, distance = "jaccard", trymax = 40, binary=TRUE)
 community.jmds <- metaMDS(communityB, distance = "jaccard", binary = TRUE, previous.best = community.jmds)  # doesn't converge well, with final stress > 0.20
+plot(community.jmds)
 stressplot(community.jmds)
 ```
 
@@ -783,11 +785,11 @@ mcmc.control <- list(n.burnin = 300, n.iteration = 1000, n.thin = 30, seed = 123
 
 
 # set up model
-commB.fit.b3.4.none <- boral(communityB, family = "binomial", num.lv = 2, row.eff = "random", mcmc.control = mcmc.control, save.model = TRUE); beep(sound = 1)
+commB.fit.b3.4.none <- boral(communityB, family = "binomial", lv.control = list(num.lv = 2), row.eff = "random", mcmc.control = mcmc.control, save.model = TRUE); beep(sound = 1)
 
 # save output in case i want to do other analyses on it later
 # saveRDS(commB.fit.b3.4.none, "boral_commB.fit.b3.4.RDS")
-# commB.fit.b3.4.none <- readRDS("boral_commB.fit.b3.4.RDS") # to restore
+commB.fit.b3.4.none <- readRDS("boral_commB.fit.b3.4.RDS") # to restore
 
 summary(commB.fit.b3.4.none)
 par(mfrow = c(2,2))
