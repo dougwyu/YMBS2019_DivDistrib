@@ -789,7 +789,7 @@ commB.fit.b3.4.none <- boral(communityB, family = "binomial", lv.control = list(
 
 # save output in case i want to do other analyses on it later
 # saveRDS(commB.fit.b3.4.none, "boral_commB.fit.b3.4.RDS")
-commB.fit.b3.4.none <- readRDS("boral_commB.fit.b3.4.RDS") # to restore
+# commB.fit.b3.4.none <- readRDS("boral_commB.fit.b3.4.RDS") # to restore
 
 summary(commB.fit.b3.4.none)
 par(mfrow = c(2,2))
@@ -866,8 +866,8 @@ Testing whether i can combine levels within habitatN$habitat. I use mvabund to t
 # communityB <- communityB[ , 1:150]  # comment away if i want to use the whole dataset.  this is to produce a partial dataset for debugging
 communityB.mvb <- mvabund(communityB) 
 
-#nboot <- 499 # set to 20 for debugging (~25 mins for nboot = 499)
-nboot <- 999 # set to 999 for publication
+#nboot <- 999 # set to 50 for debugging (~25 mins for nboot = 499)
+nboot <- 50 # set to 999 for publication
 
 
 # base model with no levels combined
@@ -930,7 +930,7 @@ pvalues.corr.fdr
 communityB.mvb <- mvabund(communityB) 
 
 # nboot <- 499 # set to 20 for debugging (~ 20 mins for 499)
-nboot <- 999 # set to 999 for publication
+nboot <- 50 # set to 999 for publication
 
 # base model with no levels combined:  mod_BBCLECJCMPNF.mvb
 
@@ -987,7 +987,7 @@ pvalues.corr.fdr
 
 communityB.mvb <- mvabund(communityB) 
 #nboot <- 499 # set to 20 for debugging (~25 mins for nboot = 499)
-nboot <- 999 # set to 999 for publication
+nboot <- 50 # set to 999 for publication
 
 # base model with Elevation_m+Habitat+Elevation_m*Habitat
 mod_ele_hab_x.mvb <- manyglm(communityB.mvb ~ Elevation_m+Habitat+Elevation_m*Habitat, data = habitatN, family = binomial("cloglog"))
